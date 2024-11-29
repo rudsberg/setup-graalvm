@@ -417,3 +417,50 @@ jobs:
       #     popd > /dev/null
       - name: Remove components
         run: gu remove espresso llvm-toolchain nodejs python ruby wasm
+  test-sbom:
+    name: test 'native-image-enable-sbom' option
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          java-version: 'latest-ea'
+          distribution: 'graalvm'
+          native-image-enable-sbom: 'true'
+      - name: Build Maven project and verify SBOM was generated
+        run: |
+          cd __tests__/sbom/main-test-app
+          mvn -Pnative package
+          cd target
+          echo "Checking for 'pkg:maven/org.json/json@20211205'"
+          grep -q 'pkg:maven/org.json/json@20211205' sbom.sbom.json || exit 1
+          echo "Checking for 'main-test-app'"
+          grep -q '"main-test-app"' sbom.sbom.json || exit 1
+          echo "Checking for 'svm'"
+          grep -q '"svm"' sbom.sbom.json || exit 1
+          echo "Checking for 'nativeimage'"
+          grep -q '"nativeimage"' sbom.sbom.json || exit 1
+          echo "SBOM was successfully generated and contained the expected contents"
+        shell: bash
+        if: runner.os != 'Windows'
+      - name: Build Maven project and verify SBOM was generated (Windows)
+        run: |
+          cd __tests__\sbom\main-test-app
+          mvn -Pnative package
+          cd target
+          echo "Checking for 'pkg:maven/org.json/json@20211205'"
+          findstr /c:"pkg:maven/org.json/json@20211205" sbom.sbom.json || exit /b 1
+          echo "Checking for 'main-test-app'"
+          findstr /c:"\"main-test-app\"" sbom.sbom.json || exit /b 1
+          echo "Checking for 'svm'"
+          findstr /c:"\"svm\"" sbom.sbom.json || exit /b 1
+          echo "Checking for 'nativeimage'"
+          findstr /c:"\"nativeimage\"" sbom.sbom.json || exit /b 1
+          echo "SBOM was successfully generated and contained the expected contents"
+        shell: cmd
+        if: runner.os == 'Windows'
