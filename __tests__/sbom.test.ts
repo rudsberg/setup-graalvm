@@ -227,7 +227,7 @@ describe('sbom feature', () => {
 
       mockFindSBOM([])
 
-      await expect(processSBOM()).rejects.toBeInstanceOf(Error);
+      await expect(processSBOM()).rejects.toBeInstanceOf(Error)
     })
 
     it('should throw when JSON contains an invalid SBOM', async () => {
@@ -282,9 +282,11 @@ describe('sbom feature', () => {
     })
 
     it('should handle GitHub API submission errors gracefully', async () => {
-      mockGithubAPIReturnValue(new Error('API submission failed'))      
-      
-      await expect(setUpAndProcessSBOM(sampleSBOM)).rejects.toBeInstanceOf(Error);
+      mockGithubAPIReturnValue(new Error('API submission failed'))
+
+      await expect(setUpAndProcessSBOM(sampleSBOM)).rejects.toBeInstanceOf(
+        Error
+      )
     })
   })
 })

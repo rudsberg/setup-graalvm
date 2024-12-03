@@ -91180,7 +91180,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.SBOM_FILE_SUFFIX = exports.INPUT_NI_SBOM = void 0;
 exports.setUpSBOMSupport = setUpSBOMSupport;
 exports.processSBOM = processSBOM;
 exports.mapToComponentsWithDependencies = mapToComponentsWithDependencies;
@@ -91190,12 +91189,19 @@ const fs = __importStar(__nccwpck_require__(7147));
 const github = __importStar(__nccwpck_require__(5438));
 const glob = __importStar(__nccwpck_require__(8090));
 const path_1 = __nccwpck_require__(1017);
-exports.INPUT_NI_SBOM = 'native-image-enable-sbom';
-exports.SBOM_FILE_SUFFIX = '.sbom.json';
-function setUpSBOMSupport() {
-    const isSbomEnabled = core.getInput(exports.INPUT_NI_SBOM) === 'true';
-    if (!isSbomEnabled) {
+const semver_1 = __nccwpck_require__(1383);
+const INPUT_NI_SBOM = 'native-image-enable-sbom';
+const SBOM_FILE_SUFFIX = '.sbom.json';
+const MIN_JAVA_VERSION = 24;
+function setUpSBOMSupport(javaVersion, distribution) {
+    if (isFeatureNotEnabled()) {
         return;
+    }
+    if (distribution !== c.DISTRIBUTION_GRAALVM) {
+        throw new Error(`The '${INPUT_NI_SBOM}' option is only supported for Oracle GraalVM (distribution '${c.DISTRIBUTION_GRAALVM}'), but found distribution '${distribution}'.`);
+    }
+    if ((0, semver_1.major)(javaVersion) < MIN_JAVA_VERSION) {
+        throw new Error(`The '${INPUT_NI_SBOM}' option is only supported for GraalVM for JDK ${MIN_JAVA_VERSION} or later, but found java-version '${javaVersion}'.`);
     }
     let options = process.env[c.NATIVE_IMAGE_OPTIONS_ENV] || '';
     if (options.length > 0) {
@@ -91203,50 +91209,39 @@ function setUpSBOMSupport() {
     }
     options += '--enable-sbom=export';
     core.exportVariable(c.NATIVE_IMAGE_OPTIONS_ENV, options);
-    core.info('Enabled SBOM generation for Native Image builds');
+    core.info('Enabled SBOM generation for Native Image build');
 }
 function processSBOM() {
     return __awaiter(this, void 0, void 0, function* () {
-        const isSbomEnabled = core.getInput(exports.INPUT_NI_SBOM) === 'true';
-        if (!isSbomEnabled) {
+        if (isFeatureNotEnabled()) {
             return;
         }
         const sbomPath = yield findSBOMFilePath();
-        if (!sbomPath) {
-            return;
-        }
         try {
             const sbomContent = fs.readFileSync(sbomPath, 'utf8');
             const sbomData = parseSBOM(sbomContent);
-            if (!sbomData) {
-                return;
-            }
             const components = mapToComponentsWithDependencies(sbomData);
-            if (components.length === 0) {
-                return;
-            }
             printSBOMContent(components);
             const snapshot = convertSBOMToSnapshot(sbomPath, components);
-            if (snapshot) {
-                yield submitDependencySnapshot(snapshot);
-            }
+            yield submitDependencySnapshot(snapshot);
         }
         catch (error) {
-            core.warning(`Failed to process SBOM file: ${error instanceof Error ? error.message : String(error)}`);
+            throw new Error(`Failed to process SBOM file: ${error instanceof Error ? error.message : String(error)}`);
         }
     });
 }
+function isFeatureNotEnabled() {
+    return core.getInput(INPUT_NI_SBOM) === 'false';
+}
 function findSBOMFilePath() {
     return __awaiter(this, void 0, void 0, function* () {
-        const globber = yield glob.create(`**/*${exports.SBOM_FILE_SUFFIX}`);
+        const globber = yield glob.create(`**/*${SBOM_FILE_SUFFIX}`);
         const sbomFiles = yield globber.glob();
         if (sbomFiles.length === 0) {
-            logSkippingSubmission('No SBOM file found. Make sure native-image build completed successfully.');
-            return null;
+            throw new Error('No SBOM file found. Make sure native-image build completed successfully.');
         }
         if (sbomFiles.length > 1) {
-            logSkippingSubmission(`Found multiple SBOM files: ${sbomFiles.join(', ')}.`);
-            return null;
+            throw new Error(`Expected one SBOM file but found multiple: ${sbomFiles.join(', ')}.`);
         }
         core.info(`Found SBOM file: ${sbomFiles[0]}`);
         return sbomFiles[0];
@@ -91258,15 +91253,13 @@ function parseSBOM(jsonString) {
         return sbomData;
     }
     catch (error) {
-        core.warning(`Failed to parse SBOM JSON: ${error instanceof Error ? error.message : String(error)}`);
-        return null;
+        throw new Error(`Failed to parse SBOM JSON: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-// Maps the SBOM data to a list of components with their dependencies
+// Maps the SBOM to a list of components with their dependencies
 function mapToComponentsWithDependencies(sbom) {
     if (!sbom || sbom.components.length === 0) {
-        logSkippingSubmission('Invalid SBOM data or no components found.');
-        return [];
+        throw new Error('Invalid SBOM data or no components found.');
     }
     return sbom.components.map((component) => {
         var _a, _b;
@@ -91290,7 +91283,7 @@ function printSBOMContent(components) {
     }
     core.info('==================');
 }
-function mapToSnapshotResolved(components) {
+function mapComponentsToGithubAPIFormat(components) {
     return Object.fromEntries(components
         .filter(component => {
         if (!component.purl) {
@@ -91309,9 +91302,8 @@ function mapToSnapshotResolved(components) {
 function convertSBOMToSnapshot(sbomPath, components) {
     const context = github.context;
     const sbomFileName = (0, path_1.basename)(sbomPath);
-    if (!sbomFileName.endsWith(exports.SBOM_FILE_SUFFIX)) {
-        logSkippingSubmission(`Invalid SBOM file name: ${sbomFileName}. Expected a file ending with ${exports.SBOM_FILE_SUFFIX}.`);
-        return null;
+    if (!sbomFileName.endsWith(SBOM_FILE_SUFFIX)) {
+        throw new Error(`Invalid SBOM file name: ${sbomFileName}. Expected a file ending with ${SBOM_FILE_SUFFIX}.`);
     }
     return {
         version: 0,
@@ -91331,7 +91323,7 @@ function convertSBOMToSnapshot(sbomPath, components) {
         manifests: {
             [sbomFileName]: {
                 name: sbomFileName,
-                resolved: mapToSnapshotResolved(components),
+                resolved: mapComponentsToGithubAPIFormat(components),
                 metadata: {
                     generated_by: 'SBOM generated by GraalVM Native Image',
                     action_version: c.ACTION_VERSION
@@ -91364,12 +91356,9 @@ function submitDependencySnapshot(snapshotData) {
             core.info('Dependency snapshot submitted successfully.');
         }
         catch (error) {
-            core.warning(`Failed to submit dependency snapshot for SBOM: ${error instanceof Error ? error.message : String(error)}`);
+            throw new Error(`Failed to submit dependency snapshot for SBOM: ${error instanceof Error ? error.message : String(error)}`);
         }
     });
-}
-function logSkippingSubmission(prefix) {
-    core.warning(`${prefix} Skipping submission to GitHub Dependency API.`);
 }
 
 

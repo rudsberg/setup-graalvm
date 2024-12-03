@@ -75,7 +75,9 @@ async function findSBOMFilePath(): Promise<string> {
   }
 
   if (sbomFiles.length > 1) {
-    throw new Error (`Expected one SBOM file but found multiple: ${sbomFiles.join(', ')}.`)
+    throw new Error(
+      `Expected one SBOM file but found multiple: ${sbomFiles.join(', ')}.`
+    )
   }
 
   core.info(`Found SBOM file: ${sbomFiles[0]}`)
