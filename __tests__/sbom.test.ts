@@ -86,10 +86,11 @@ describe('sbom feature', () => {
   })
 
   afterEach(() => {
-    // Restore original env
     process.env = originalEnv
-
     jest.clearAllMocks()
+    spyInfo.mockRestore()
+    spyWarning.mockRestore() 
+    spyExportVariable.mockRestore()
     rmSync(workspace, {recursive: true, force: true})
   })
 
