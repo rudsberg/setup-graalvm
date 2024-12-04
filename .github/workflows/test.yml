@@ -118,7 +118,7 @@ jobs:
             os: ubuntu-latest
           - version: '22.3.1'
             java-version: '11' # for JDK 11 notification
-            components: 'native-image'
+            components: 'native-image'  
             os: macos-13
           - version: '22.3.1'
             java-version: '17'
